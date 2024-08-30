@@ -1,5 +1,5 @@
 # install.packages("haven")
-# 必要なパッケージ
+# packages
 library(haven)
 library(tidyverse)
 
@@ -28,6 +28,52 @@ State_Level_Dataset <- State_Level_Dataset %>%
            state=="New Jersey" & year>=2015 ~ 1,
            TRUE ~ 0))
 
+# other reforms
+## EDR
+State_Level_Dataset <-  State_Level_Dataset %>% 
+  mutate(same = case_when(
+    state == "California" & year>=2012 ~ 1,
+    state=="Colorado" & year>=2013 ~ 1,
+    state=="Connecticut" & year>=2013 ~ 1,
+    state=="Idaho" & year>=1994 ~ 1,
+    state=="Illinois" & year>=2014 ~ 1,
+    state=="Iowa" & year>=2007 ~ 1,
+    state=="Maine" & year>=1973 ~ 1,
+    state=="Maryland" & year>=2013 ~ 1,
+    state=="Minnesota" & year>=1974 ~ 1,
+    state=="Montana" & year>=2005 ~ 1,
+    state=="New Hampshire" & year>=1996 ~ 1,
+    state=="Wisconsin" & year>=1975 ~ 1,
+    state=="Wyoming" & year>=1994 ~ 1,
+    TRUE ~ 0)) 
+# %>% select(year, state, same) %>% view()
+
+## OR
+State_Level_Dataset <- State_Level_Dataset %>% 
+  mutate(online = case_when(
+    state=="Arizona" & year>=2002 ~ 1,
+    state=="California" & year>=2012 ~ 1,
+    state=="Colorado" & year>=2010 ~ 1,
+    state=="Connecticut" & year>=2014 ~ 1,
+    state=="Delaware" & year>=2006 ~ 1,
+    state=="Georgia" & year>=2014 ~ 1,
+    state=="Illinois" & year>=2014 ~ 1,
+    state=="Indiana" & year>=2010 ~ 1,
+    state=="Kansas" & year>=2009 ~ 1,
+    state=="Louisiana" & year>=2010 ~ 1,
+    state=="Maryland" & year>=2012 ~ 1,
+    state=="Minnesota" & year>=2013 ~ 1,
+    state=="Missouri" & year>=2013 ~ 1,
+    state=="Nevada" & year>=2012 ~ 1,
+    state=="New York" & year>=2012 ~ 1,
+    state=="Oregon" & year>=2010 ~ 1,
+    state=="South Carolina" & year>=2012 ~ 1,
+    state=="Utah" & year>=2010 ~ 1,
+    state=="Virginia" & year>=2013 ~ 1,
+    state=="Washington" & year>=2008 ~ 1,
+    TRUE ~ 0)) 
+
+
 # taking logs
 State_Level_Dataset <- State_Level_Dataset %>%
   mutate(across(c(e019, e021, e030, e031, e041, e052, 
@@ -37,7 +83,7 @@ State_Level_Dataset <- State_Level_Dataset %>%
                 .names = "ln{.col}"))
 
 State_Level_Dataset <- State_Level_Dataset %>%
-    mutate(cuurent_exp = log(1 + (e004/e001)),
+    mutate(current_exp = log(1 + (e004/e001)),
            enrolment1=enrollment/1000,
            population1=population/1000,
            rel_margin=vote_margin_correct/tot_vote,
@@ -88,7 +134,7 @@ State_Level_Dataset <- State_Level_Dataset %>%
   mutate(treated_state = max(pre_reg)) %>% 
   ungroup()
 
-# 等号いる？もとのdoファイルとずれがあるかも
+# may be < instead of <=
 State_Level_Dataset <- State_Level_Dataset %>% 
   mutate(F10_last_year= case_when(pre_reg == 1 ~ (year - 10),
                                   TRUE ~ NA) ) 
@@ -115,8 +161,7 @@ State_Level_Dataset <- State_Level_Dataset %>%
   group_by(state) %>% 
   mutate(max_L4_last_year = max(L4_last_year, na.rm = TRUE)) %>% 
   mutate(L4_last_pre = (year >= max_L4_last_year & treated_state == 1) |
-           (state=="North Carolina" & year>2013) ) %>% 
-  select(state, year,max_L4_last_year, L4_last_pre)
+           (state=="North Carolina" & year>2013) ) 
 
 State_Level_Dataset <-  State_Level_Dataset %>%
   group_by(state) %>% 
@@ -129,6 +174,11 @@ State_Level_Dataset <-  State_Level_Dataset %>%
 State_Level_Dataset <-  State_Level_Dataset %>% 
   mutate(rel_year = case_when(treated_state == 1 ~ (year - treated_year),
                               TRUE ~ -1000)) 
+# revise NC
+State_Level_Dataset <-  State_Level_Dataset %>% 
+  mutate(rel_year = case_when(state == "North Carolina" & year == 2014 ~ -1000,
+                              TRUE ~ rel_year)) 
+
 # save cleaned data
 
 saveRDS(State_Level_Dataset, "State_Level_Dataset.rds")
