@@ -1,0 +1,176 @@
+---
+title: "Replication of Bertocchi et al. (2020)"
+author: "Team Heterogeneity"
+date: "2024-08-30"
+output: slidy_presentation
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+# 論文概要
+
+- 説明変数は、事前登録制度を緩和するための政策の導入
+- 結果変数は、高度教育に対する支出の割合
+- 仮説は、緩和に伴い若者の投票が増加するので、教育に対する支出も増加する
+- 分析手法は Difference in Differences
+- 処置のタイミングはunitによってバラバラ
+
+
+
+# Cleaning Data
+
+## 方針
+
+- 論文のWebページからReplication packageをダウンロード
+- 処置変数の作成
+- 変数作成、共変量の変換
+   - Lagとleadを取る
+   - 変数`rel_year`を作成など
+- データセットを保存
+
+## 処理結果
+
+```{r}
+# packages for estimation
+library(tidyverse)
+library(fixest)
+library(gt)
+# load data
+cleaned_df <- read_rds("State_Level_Dataset.rds")
+dim(cleaned_df)
+cleaned_df %>% 
+  select(state, year, F1_pre, L1_pre, pre_reg_s, lnp_income, rel_year) %>% 
+  filter(state=="California" & year>=2007) %>% 
+  head()
+```
+
+
+```{}
+State_Level_Dataset <- State_Level_Dataset %>%
+  mutate(pre_reg_s = case_when(
+           state=="California" & year>=2009 ~ 1,
+           state=="Colorado" & year>=2013 ~ 1,
+           state=="Delaware" & year>=2010 ~ 1,
+           state=="Florida" & year>=2007 ~ 1,
+           state=="Louisiana" & year>=2014~ 1,
+           state=="Maine" & year>=2011 ~ 1,
+           state=="Maryland" & year>=2010 ~ 1,
+           state=="Massachusetts" & year>=2014 ~ 1,
+           state=="North Carolina" & year>=2009 & year<=2013 ~ 1,
+           state=="Oregon" & year>=2007 ~ 1,
+           state=="Rhode Island" & year>=2010 ~ 1,
+           state=="Utah" & year>=2015 ~ 1,
+           state=="Hawaii" & year>=1993 ~ 1,
+           state=="New Jersey" & year>=2015 ~ 1,
+           TRUE ~ 0))
+
+```
+
+## お気持ち
+
+- 可読性とコードのオシャレさは時にトレードオフ
+- #コメントアウト忘れがち(アンサンブルプログラミングだからか？)
+- Stataの場合はよくわからないが、Rだとrelative yearを表す変数をつくって、fastDummies関数できる
+- fixestをつかえば、ダミー変数を作る必要もない
+
+# Analysis
+
+## 方針
+
+- DIDをする
+- 平行トレンドを確認し政策効果の変化を見るために、event studyをする
+- Reference（参照項）を-1と-1000に設定する
+- 統制群はRelative yearを-1000に設定する
+- fixestパッケージでTWFE-DIDやIFE-DID、event studyを実行する
+- etable関数で結果を出力する
+
+## 分析結果
+
+```{r}
+# packages for estimation
+library(tidyverse)
+library(fixest)
+ 
+# column 1
+model_eve <- feols(lne031 ~ i(rel_year, treated_state, ref=c(-1, -1000)) + lnp_income
+                   | state + year, data = cleaned_df, cluster="state")
+# lne031 = "Higher Education Exp."(log)
+
+
+# column 2 CHECK!
+model_ief <- feols(lne031 ~ i(rel_year, treated_state, ref=c(-1, -1000)) + lnp_income + i(state, year)
+                   | state + year, data = cleaned_df, cluster="state")
+
+# column 3 CHECK!
+model_ovr <- feols(lne031 ~ i(rel_year, treated_state, ref=c(-1, -1000)) + lnp_income +i(state, year) 
+                   + same + online + nrva 
+                   | state + year, data = cleaned_df, cluster="state")
+
+
+# column 4 CHECK!
+model_cv <- feols(lne031 ~ i(rel_year, treated_state, ref=c(-1, -1000)) + lnp_income +i(state, year) 
+                  + same + online + nrva + med_age + sh16_25 + lnenrollment + blk_pop_sh + wht_pop_sh 
+                  + gini + lnpopulation + unemp + i(gub_years) + democ + incumbent + gov_run_again 
+                  + past_gov_dem + rel_margin + turnout_rate + term_limited + lne001 + current_exp 
+                  + lnr05
+                   | state + year, data = cleaned_df, cluster="state")
+
+
+# column 5
+model_att <- feols(lne031 ~ pre_reg_s + lnp_income +i(state, year) + same + online + nrva 
+                   + med_age + sh16_25 + lnenrollment + blk_pop_sh + wht_pop_sh + gini 
+                   + lnpopulation + unemp + i(gub_years) + democ + incumbent 
+                   + gov_run_again + past_gov_dem + rel_margin + turnout_rate + term_limited
+                   + lne001 + current_exp + lnr05
+                   | state + year, data = cleaned_df, cluster="state")
+
+
+```
+
+```{r}
+table_2 <- etable(model_eve, model_ief, model_ovr, model_cv, model_att,
+                  cluster="state", drop= "!(treated_state x rel_year = [0-4]$|pre_reg_s)")
+table_2[3:8, 1] <- c("D(t = 0)", "D(t = 1)", "D(t = 2)", "D(t = 3)", "D(t = 4)", "ATT")
+
+effect <- c("State x year", "Other reforms", "Controls")
+c1 <- c("No", "No", "No")
+c2 <- c("Yes", "No", "No")
+c3 <- c("Yes", "Yes", "No")
+c4 <- c("Yes", "Yes", "Yes")
+c5 <- c("Yes", "Yes", "Yes")
+add_rows <- data.frame(effect, c1, c2, c3, c4, c5)
+colnames(table_2)[1] <- " "
+colnames(add_rows) <- colnames(table_2)
+tmp <- rbind(table_2[1:11, ], add_rows)
+rbind(tmp, table_2[12:16, ]) %>% gt()
+
+coefplot(model_eve, drop = "!rel_year::(-10|-[1-9]|[0-4]):treated_state")
+coefplot(model_ief, drop = "!rel_year::(-10|-[1-9]|[0-4]):treated_state")
+
+```
+
+
+
+## お気持ち
+
+- feolsは便利だが、固定効果として交差項を使うのが面倒
+   - 元の出力を手動で編集する必要性
+- coefplotの出力がggplot2に基づいていないので見にくい
+- 正規表現を使うとreplication時の可読性が低くて困る
+- etableの汎用性が低い
+- 調整済み決定係数を元の論文では載せていないのはなぜかよくわらからなかった。
+
+# Conclusion
+## アンサンブル学習を通して
+
+- ゆうと: 異なるプログラミング言語の比較を通じて、R言語のくせを学べた
+- しゅんすけ: 同じことをするのにも、様々なやり方を比較検討しながらプログラミングできた
+- まさゆき: R初心者で参加したが、周りの助けで楽しく学べた
+- ほのか: 技術的にも精神的にも成長し合えた
+- ひびき: 自分の知らないパッケージやコーディングとたくさん出会えて楽しかった
+
+## まとめ
+
+5日間にわたり、みんなで壮大なensembleを奏でることができました
